@@ -1,7 +1,7 @@
 import type { Server as HTTPServer } from "http";
 import { Server as IOServer, type Socket } from "socket.io";
-import { nanoid } from "nanoid";
 import { ZodError, type ZodTypeAny, type z as ZType } from "zod";
+import { newPlayerId, newRoomId, newSessionToken } from "@/lib/game/ids";
 
 import { CLIENT_EVENTS, SERVER_EVENTS } from "@/lib/socket/events";
 import type {
@@ -11,6 +11,7 @@ import type {
 import {
   GuessSubmitSchema,
   QuizSubmitSchema,
+  RaceSubmitSchema,
   RejoinSchema,
   RoomCreateSchema,
   RoomIdOnlySchema,
@@ -35,6 +36,12 @@ import {
   startGuessRound,
   submitGuess,
 } from "@/lib/game/guess-engine";
+import {
+  finalizeRaceRound,
+  isRaceGameFinished,
+  startRaceRound,
+  submitRaceAnswer,
+} from "@/lib/game/race-engine";
 import { cancelRoomTimer, startRoomTimer } from "@/lib/game/timers";
 
 type SocketData = {
@@ -89,27 +96,27 @@ function scheduleRoundEnd(io: IO, room: RoomState, durationMs: number) {
 function endCurrentRound(io: IO, room: RoomState) {
   cancelRoomTimer(room.roomId);
   if (!room.currentRound) return;
+  let finished = false;
   if (room.currentRound.kind === "quiz") {
     finalizeQuizRound(room);
-    const finished = isQuizGameFinished(room);
-    if (finished) room.status = "finished";
-    emitRoomState(io, room);
-    emitLeaderboard(io, room);
-    io.to(room.roomId).emit(SERVER_EVENTS.ROUND_ENDED, publicRoomState(room));
-    if (finished) io.to(room.roomId).emit(SERVER_EVENTS.GAME_FINISHED, publicRoomState(room));
-  } else {
+    finished = isQuizGameFinished(room);
+  } else if (room.currentRound.kind === "guess") {
     finalizeGuessRound(room);
-    const finished = isGuessGameFinished(room);
-    if (finished) room.status = "finished";
-    emitRoomState(io, room);
-    emitLeaderboard(io, room);
-    io.to(room.roomId).emit(SERVER_EVENTS.ROUND_ENDED, publicRoomState(room));
-    if (finished) io.to(room.roomId).emit(SERVER_EVENTS.GAME_FINISHED, publicRoomState(room));
+    finished = isGuessGameFinished(room);
+  } else {
+    finalizeRaceRound(room);
+    finished = isRaceGameFinished(room);
   }
+  if (finished) room.status = "finished";
+  emitRoomState(io, room);
+  emitLeaderboard(io, room);
+  io.to(room.roomId).emit(SERVER_EVENTS.ROUND_ENDED, publicRoomState(room));
+  if (finished) io.to(room.roomId).emit(SERVER_EVENTS.GAME_FINISHED, publicRoomState(room));
 }
 
 function beginNextRound(io: IO, room: RoomState) {
   cancelRoomTimer(room.roomId);
+  let durationMs: number | null = null;
   if (room.mode === "quiz") {
     const round = startQuizRound(room);
     if (!round) {
@@ -118,11 +125,21 @@ function beginNextRound(io: IO, room: RoomState) {
       io.to(room.roomId).emit(SERVER_EVENTS.GAME_FINISHED, publicRoomState(room));
       return;
     }
-    scheduleRoundEnd(io, room, round.durationMs);
-  } else {
+    durationMs = round.durationMs;
+  } else if (room.mode === "guess") {
     const round = startGuessRound(room);
-    scheduleRoundEnd(io, room, round.durationMs);
+    durationMs = round.durationMs;
+  } else {
+    const round = startRaceRound(room, room.mode);
+    if (!round) {
+      room.status = "finished";
+      emitRoomState(io, room);
+      io.to(room.roomId).emit(SERVER_EVENTS.GAME_FINISHED, publicRoomState(room));
+      return;
+    }
+    durationMs = round.durationMs;
   }
+  scheduleRoundEnd(io, room, durationMs);
   emitRoomState(io, room);
   io.to(room.roomId).emit(SERVER_EVENTS.ROUND_STARTED, publicRoomState(room));
 }
@@ -142,9 +159,12 @@ export function registerSocketHandlers(server: HTTPServer): IO {
       const parsed = parse(RoomCreateSchema, payload);
       if ("__error" in parsed) return ack?.({ ok: false, error: parsed.__error });
 
-      const roomId = nanoid(8);
-      const playerId = nanoid(12);
-      const sessionToken = nanoid(24);
+      // Retry up to a few times in the astronomically unlikely event of
+      // a collision in the in-memory map.
+      let roomId = newRoomId();
+      for (let i = 0; i < 5 && getRoom(roomId); i++) roomId = newRoomId();
+      const playerId = newPlayerId();
+      const sessionToken = newSessionToken();
 
       const room = createRoom({ roomId, hostId: playerId, mode: parsed.mode });
       room.players.set(playerId, {
@@ -173,11 +193,17 @@ export function registerSocketHandlers(server: HTTPServer): IO {
       if ("__error" in parsed) return ack?.({ ok: false, error: parsed.__error });
 
       const room = getRoom(parsed.roomId);
-      if (!room) return ack?.({ ok: false, error: "room not found" });
-      if (room.status === "finished") return ack?.({ ok: false, error: "game finished" });
+      if (!room) return ack?.({ ok: false, error: `no room with code ${parsed.roomId}` });
+      if (room.status === "finished") return ack?.({ ok: false, error: "game already finished" });
+      // Reject duplicate display names in a room — would be confusing.
+      for (const p of room.players.values()) {
+        if (p.name.toLowerCase() === parsed.name.toLowerCase()) {
+          return ack?.({ ok: false, error: "name already taken in this room" });
+        }
+      }
 
-      const playerId = nanoid(12);
-      const sessionToken = nanoid(24);
+      const playerId = newPlayerId();
+      const sessionToken = newSessionToken();
       room.players.set(playerId, {
         id: playerId,
         name: parsed.name,
@@ -273,6 +299,26 @@ export function registerSocketHandlers(server: HTTPServer): IO {
       ack?.({ ok: true });
     });
 
+    // RACE SUBMIT (math / scramble / emoji) ----------------------------
+    socket.on(CLIENT_EVENTS.RACE_SUBMIT, (payload, ack) => {
+      const parsed = parse(RaceSubmitSchema, payload);
+      if ("__error" in parsed) return ack?.({ ok: false, error: parsed.__error });
+      const room = getRoom(parsed.roomId);
+      if (!room) return ack?.({ ok: false, error: "room not found" });
+      if (room.mode !== "math" && room.mode !== "scramble" && room.mode !== "emoji") {
+        return ack?.({ ok: false, error: "wrong mode" });
+      }
+      const playerId = socket.data.playerId;
+      if (!playerId || !room.players.has(playerId)) {
+        return ack?.({ ok: false, error: "not in room" });
+      }
+      const res = submitRaceAnswer(room, playerId, parsed.text, Date.now());
+      if (!res.accepted) return ack?.({ ok: false, error: res.reason ?? "rejected" });
+      emitRoomState(io, room);
+      if (res.winNow) endCurrentRound(io, room);
+      ack?.({ ok: true, data: { correct: res.correct } });
+    });
+
     // GUESS SUBMIT -----------------------------------------------------
     socket.on(CLIENT_EVENTS.GUESS_SUBMIT, (payload, ack) => {
       const parsed = parse(GuessSubmitSchema, payload);
@@ -306,7 +352,8 @@ export function registerSocketHandlers(server: HTTPServer): IO {
       // Stop if all rounds are used
       const doneQuiz = room.mode === "quiz" && isQuizGameFinished(room);
       const doneGuess = room.mode === "guess" && isGuessGameFinished(room);
-      if (doneQuiz || doneGuess) {
+      const doneRace = isRaceGameFinished(room);
+      if (doneQuiz || doneGuess || doneRace) {
         room.status = "finished";
         emitRoomState(io, room);
         io.to(room.roomId).emit(SERVER_EVENTS.GAME_FINISHED, publicRoomState(room));

@@ -5,12 +5,18 @@ A single Next.js server acts as the source of truth for rooms, players, game
 state, timers, scoring, and leaderboards. Browsers connect via Socket.IO and
 render live updates.
 
-Two modes in one app:
+Five modes in one app:
 
-- **Multiplayer Quiz Game** — server pushes a question, all clients answer
-  before timeout, server scores and broadcasts the leaderboard.
-- **Number Guessing Game** — server generates a target, multiple clients
-  guess concurrently, server resolves the winner fairly by arrival order.
+- **Multiplayer Quiz** — server pushes a question, all clients answer before
+  timeout, server scores by correctness plus speed bonus.
+- **Number Guessing** — server generates a secret target, clients guess
+  concurrently, server resolves the winner fairly by arrival order.
+- **Math Sprint** — fast arithmetic problems; first correct typed answer wins.
+- **Word Scramble** — unscramble the word; first to type the original wins.
+- **Emoji Decode** — decode the movie / phrase hidden in emoji; first correct wins.
+
+The UI uses a GitHub dark palette with Apple-style glassmorphism panels and
+Google Material Symbols icons.
 
 There is no database. All room state lives in process memory and resets when
 the server restarts — the project is intentionally simple so the distributed
@@ -114,7 +120,7 @@ Client → server (validated with Zod):
 - `room:create`, `room:join`, `room:leave`
 - `session:rejoin`
 - `game:start`, `round:next`, `game:reset`
-- `quiz:submit-answer`, `guess:submit`
+- `quiz:submit-answer`, `guess:submit`, `race:submit-answer`
 
 Server → client:
 
@@ -133,6 +139,15 @@ Server → client:
 - Serverless deployment (e.g. Vercel functions) is not suitable for persistent
   WebSocket connections — deploy as a long-running Node process.
 - Reconnection support is in-memory only (per-session token in the room).
+
+---
+
+## Room codes
+
+Room codes are 6-character uppercase strings drawn from a curated alphabet
+that excludes visually ambiguous characters (`0/O`, `1/I/L`, `5/S`). Clients
+normalize typed codes (trim + uppercase) so `ab3k9z` and `AB3K9Z` are the
+same room.
 
 ---
 

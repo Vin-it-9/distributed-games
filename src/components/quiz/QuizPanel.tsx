@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { PublicRoomState } from "@/lib/game/types";
 import { TimerBar } from "@/components/shared/TimerBar";
+import { Icon } from "@/components/shared/Icon";
 
 export function QuizPanel({
   room,
@@ -23,23 +24,27 @@ export function QuizPanel({
   const isEnded = room.status === "round-ended" || room.status === "finished";
 
   if (!round) {
-    return <div className="panel">waiting for question…</div>;
+    return <div className="glass p-5 text-gh-muted">waiting for question…</div>;
   }
 
   return (
-    <div className="panel">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="label">
-          round {round.roundNumber} · quiz
+    <div className="glass p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="chip chip-accent">
+          <Icon name="flag" size={12} /> round {round.roundNumber}/
+          {room.totalRounds}
         </span>
         <span className="chip">
+          <Icon name="how_to_vote" size={12} />
           {round.answeredPlayerIds.length}/{room.players.length} answered
         </span>
       </div>
       <TimerBar endsAt={round.endsAt} durationMs={round.durationMs} />
-      <h3 className="mt-4 mb-3 text-base font-semibold leading-snug">
+
+      <h3 className="mt-5 mb-4 text-[15px] font-semibold leading-snug">
         {round.question.prompt}
       </h3>
+
       <div className="grid gap-2">
         {round.question.choices.map((c, i) => {
           const isCorrect = isEnded && round.correctIndex === i;
@@ -52,25 +57,30 @@ export function QuizPanel({
                 setPicked(i);
                 onSubmit(i);
               }}
-              className={`btn justify-start text-left ${
+              className={`btn justify-start text-left py-3 ${
                 isCorrect
-                  ? "border-good bg-[#0f2a1d]"
+                  ? "!border-gh-green !bg-gh-green/15"
                   : selected
-                    ? "border-accent"
+                    ? "!border-gh-accent"
                     : ""
               }`}
             >
-              <span className="mr-2 text-slate-400">
-                {String.fromCharCode(65 + i)}.
+              <span className="mr-2 inline-grid h-5 w-5 place-items-center rounded bg-white/10 text-[11px] font-semibold">
+                {String.fromCharCode(65 + i)}
               </span>
-              {c}
+              <span className="flex-1 whitespace-normal">{c}</span>
+              {isCorrect && (
+                <Icon name="check_circle" size={16} className="text-gh-green" />
+              )}
             </button>
           );
         })}
       </div>
-      <div className="mt-3 label">
+
+      <div className="mt-4 text-xs text-gh-muted flex items-center gap-1.5">
+        <Icon name="info" size={14} />
         {isEnded
-          ? "round ended — waiting for host to advance"
+          ? "round ended — host advances to next round"
           : alreadyAnswered
             ? "answer locked in — waiting for timeout"
             : "pick an answer — only the first submission counts"}

@@ -7,10 +7,9 @@ import type {
   RoundHistoryEntry,
   QuizRound,
   GuessRound,
+  RaceRound,
 } from "./types";
 
-// Full server-side room state. `players` uses a Map for O(1) updates; we
-// convert to an array only when broadcasting.
 export type RoomState = {
   roomId: string;
   hostId: string;
@@ -18,15 +17,13 @@ export type RoomState = {
   players: Map<string, Player>;
   status: RoomStatus;
   roundNumber: number;
-  currentRound?: QuizRound | GuessRound;
+  currentRound?: QuizRound | GuessRound | RaceRound;
   usedQuestionIds: Set<string>;
   history: RoundHistoryEntry[];
-  // sessionToken -> playerId, used for rejoin after refresh
   sessions: Map<string, string>;
   createdAt: number;
 };
 
-// Module-scoped map persists for the life of the Node process. Resets on restart.
 const rooms = new Map<string, RoomState>();
 
 export function createRoom(params: {
@@ -58,26 +55,32 @@ export function deleteRoom(roomId: string): void {
   rooms.delete(roomId);
 }
 
-export function getAllRoomIds(): string[] {
-  return Array.from(rooms.keys());
-}
-
 export function buildLeaderboard(room: RoomState): LeaderboardEntry[] {
   return Array.from(room.players.values())
     .sort((a, b) => b.score - a.score || a.joinedAt - b.joinedAt)
     .map((p) => ({ playerId: p.id, name: p.name, score: p.score }));
 }
 
-// Strips server-only fields (correct answer, target number) when the round is
-// still live. Returns JSON-safe shape (no Maps).
+// Total rounds for the mode — surfaced to clients so the progress indicator works.
+export function totalRoundsFor(mode: GameMode): number {
+  switch (mode) {
+    case "quiz": return 5;
+    case "guess": return 3;
+    case "math":
+    case "scramble":
+    case "emoji":
+      return 5;
+  }
+}
+
 export function publicRoomState(room: RoomState): PublicRoomState {
   const leaderboard = buildLeaderboard(room);
   const players = Array.from(room.players.values());
+  const reveal = room.status === "round-ended" || room.status === "finished";
 
   let currentRound: PublicRoomState["currentRound"] | undefined;
-  if (room.currentRound?.kind === "quiz") {
-    const r = room.currentRound;
-    const reveal = room.status === "round-ended" || room.status === "finished";
+  const r = room.currentRound;
+  if (r?.kind === "quiz") {
     currentRound = {
       kind: "quiz",
       roundNumber: r.roundNumber,
@@ -92,9 +95,7 @@ export function publicRoomState(room: RoomState): PublicRoomState {
       answeredPlayerIds: Object.keys(r.answers),
       correctIndex: reveal ? r.correctIndex ?? r.question.correctIndex : undefined,
     };
-  } else if (room.currentRound?.kind === "guess") {
-    const r = room.currentRound;
-    const reveal = room.status === "round-ended" || room.status === "finished";
+  } else if (r?.kind === "guess") {
     currentRound = {
       kind: "guess",
       roundNumber: r.roundNumber,
@@ -109,6 +110,24 @@ export function publicRoomState(room: RoomState): PublicRoomState {
       winnerReason: r.winnerReason,
       winningGuess: r.winningGuess,
     };
+  } else if (r && (r.kind === "math" || r.kind === "scramble" || r.kind === "emoji")) {
+    const wrongPlayerIds = Object.entries(r.submissions)
+      .filter(([, s]) => !s.correct)
+      .map(([pid]) => pid);
+    currentRound = {
+      kind: r.kind,
+      roundNumber: r.roundNumber,
+      prompt: r.prompt,
+      subtitle: r.subtitle,
+      startedAt: r.startedAt,
+      endsAt: r.endsAt,
+      durationMs: r.durationMs,
+      submittedPlayerIds: Object.keys(r.submissions),
+      wrongPlayerIds,
+      winnerId: r.winnerId,
+      winningText: r.winningText,
+      revealAnswer: reveal ? r.revealAnswer : undefined,
+    };
   }
 
   return {
@@ -117,6 +136,7 @@ export function publicRoomState(room: RoomState): PublicRoomState {
     mode: room.mode,
     status: room.status,
     roundNumber: room.roundNumber,
+    totalRounds: totalRoundsFor(room.mode),
     players,
     leaderboard,
     currentRound,

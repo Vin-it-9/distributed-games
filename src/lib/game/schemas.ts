@@ -3,11 +3,13 @@ import { z } from "zod";
 // All payloads that cross the network get validated with Zod on the server so
 // malformed client messages cannot corrupt in-memory room state.
 
+// Room IDs are normalized to uppercase on the client before sending, but we
+// re-normalize server-side too so a raw / lowercase / padded id still works.
 export const RoomIdSchema = z
   .string()
-  .min(4)
-  .max(32)
-  .regex(/^[A-Za-z0-9_-]+$/);
+  .trim()
+  .toUpperCase()
+  .pipe(z.string().min(4).max(12).regex(/^[A-Z0-9]+$/, "room id must be letters/digits"));
 
 export const PlayerNameSchema = z
   .string()
@@ -18,7 +20,7 @@ export const PlayerNameSchema = z
 
 export const RoomCreateSchema = z.object({
   name: PlayerNameSchema,
-  mode: z.enum(["quiz", "guess"]),
+  mode: z.enum(["quiz", "guess", "math", "scramble", "emoji"]),
 });
 
 export const RoomJoinSchema = z.object({
@@ -38,6 +40,11 @@ export const QuizSubmitSchema = z.object({
 export const GuessSubmitSchema = z.object({
   roomId: RoomIdSchema,
   value: z.number().int().min(0).max(1_000_000),
+});
+
+export const RaceSubmitSchema = z.object({
+  roomId: RoomIdSchema,
+  text: z.string().trim().min(1).max(80),
 });
 
 export const RejoinSchema = z.object({

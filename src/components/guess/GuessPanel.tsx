@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { PublicRoomState } from "@/lib/game/types";
 import { TimerBar } from "@/components/shared/TimerBar";
+import { Icon } from "@/components/shared/Icon";
 
 export function GuessPanel({
   room,
@@ -15,7 +16,7 @@ export function GuessPanel({
   const [value, setValue] = useState("");
 
   if (!round) {
-    return <div className="panel">waiting for round…</div>;
+    return <div className="glass p-5 text-gh-muted">waiting for round…</div>;
   }
 
   const isEnded = room.status === "round-ended" || room.status === "finished";
@@ -27,27 +28,34 @@ export function GuessPanel({
     setValue("");
   }
 
+  const winnerName =
+    round.winnerId && room.players.find((p) => p.id === round.winnerId)?.name;
+
   return (
-    <div className="panel">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="label">round {round.roundNumber} · guess</span>
+    <div className="glass p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="chip chip-accent">
+          <Icon name="flag" size={12} /> round {round.roundNumber}/
+          {room.totalRounds}
+        </span>
         <span className="chip">
-          {round.guessCount} guesses submitted
+          <Icon name="send" size={12} /> {round.guessCount} guesses
         </span>
       </div>
       <TimerBar endsAt={round.endsAt} durationMs={round.durationMs} />
 
-      <div className="mt-4 rounded border border-border bg-[#0e1420] p-3">
-        <div className="label">pick a number</div>
-        <div className="mt-1 text-sm text-slate-300">
-          between <span className="font-semibold">{round.min}</span> and{" "}
-          <span className="font-semibold">{round.max}</span>
+      <div className="mt-5 glass-subtle p-4 text-center">
+        <div className="label">pick a number between</div>
+        <div className="mt-2 text-3xl font-semibold mono-tight tabular-nums">
+          <span className="text-gh-accent">{round.min}</span>
+          <span className="text-gh-muted mx-3">↔</span>
+          <span className="text-gh-accent">{round.max}</span>
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-4 flex gap-2">
         <input
-          className="fld"
+          className="fld mono-tight text-center text-lg tabular-nums"
           type="number"
           min={round.min}
           max={round.max}
@@ -64,32 +72,38 @@ export function GuessPanel({
           onClick={submit}
           disabled={isEnded || value === ""}
         >
-          submit
+          <Icon name="send" size={16} /> submit
         </button>
       </div>
 
       {isEnded && (
-        <div className="mt-4 rounded border border-border bg-[#141b2c] p-3">
-          <div className="label">round result</div>
-          <div className="mt-1">
-            target was <span className="font-semibold">{round.target}</span>
+        <div className="mt-5 glass-subtle p-4">
+          <div className="label flex items-center gap-1">
+            <Icon name="emoji_events" size={14} /> round result
+          </div>
+          <div className="mt-2 text-sm">
+            target was{" "}
+            <span className="font-semibold mono-tight text-gh-accent">
+              {round.target}
+            </span>
           </div>
           {round.winnerId ? (
-            <div className="text-good">
-              winner: {room.players.find((p) => p.id === round.winnerId)?.name}{" "}
-              with {round.winningGuess} (
-              {round.winnerReason === "exact" ? "exact match" : "nearest guess"}
-              )
+            <div className="text-gh-green text-sm mt-1">
+              {winnerName} won with {round.winningGuess}
+              <span className="ml-2 chip chip-good">
+                {round.winnerReason === "exact" ? "exact match" : "nearest"}
+              </span>
             </div>
           ) : (
-            <div className="text-slate-400">no valid guesses</div>
+            <div className="text-gh-muted text-sm mt-1">no valid guesses</div>
           )}
         </div>
       )}
 
-      <div className="mt-3 label">
-        server resolves the winner by arrival order. your submit time in the UI
-        is not authoritative.
+      <div className="mt-4 text-xs text-gh-muted flex items-center gap-1.5">
+        <Icon name="shield_person" size={14} />
+        server resolves the winner by arrival order. client timing is not
+        authoritative.
       </div>
     </div>
   );

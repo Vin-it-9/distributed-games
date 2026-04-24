@@ -1,7 +1,7 @@
 // Event names used on both client and server. Keep them centralized so both
 // sides can't drift. Payloads are validated with Zod on the server.
 
-import type { PublicRoomState, LeaderboardEntry } from "@/lib/game/types";
+import type { PublicRoomState, LeaderboardEntry, GameMode } from "@/lib/game/types";
 
 export const SERVER_EVENTS = {
   ROOM_STATE: "room:state",
@@ -25,6 +25,7 @@ export const CLIENT_EVENTS = {
   GAME_START: "game:start",
   QUIZ_SUBMIT: "quiz:submit-answer",
   GUESS_SUBMIT: "guess:submit",
+  RACE_SUBMIT: "race:submit-answer",
   ROUND_NEXT: "round:next",
   GAME_RESET: "game:reset",
   REJOIN: "session:rejoin",
@@ -59,7 +60,7 @@ export type Ack<T = unknown> = (
 
 export type ClientToServerEvents = {
   [CLIENT_EVENTS.ROOM_CREATE]: (
-    p: { name: string; mode: "quiz" | "guess" },
+    p: { name: string; mode: GameMode },
     ack: Ack<{ roomId: string; playerId: string; sessionToken: string }>
   ) => void;
   [CLIENT_EVENTS.ROOM_JOIN]: (
@@ -76,6 +77,10 @@ export type ClientToServerEvents = {
   [CLIENT_EVENTS.GUESS_SUBMIT]: (
     p: { roomId: string; value: number },
     ack?: Ack
+  ) => void;
+  [CLIENT_EVENTS.RACE_SUBMIT]: (
+    p: { roomId: string; text: string },
+    ack?: Ack<{ correct: boolean }>
   ) => void;
   [CLIENT_EVENTS.ROUND_NEXT]: (p: { roomId: string }, ack?: Ack) => void;
   [CLIENT_EVENTS.GAME_RESET]: (p: { roomId: string }, ack?: Ack) => void;
