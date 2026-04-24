@@ -1,0 +1,30 @@
+# Fly.io config. To deploy:
+#   1. brew install flyctl  (or https://fly.io/docs/hands-on/install-flyctl/)
+#   2. fly auth login
+#   3. fly launch --no-deploy --copy-config   # pick an app name + region
+#   4. fly deploy
+#
+# Fly builds from the Dockerfile and keeps a VM running, so WebSockets work
+# end to end.
+
+app = "distributed-games"
+primary_region = "sin"   # change if you prefer a closer region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  HOST = "0.0.0.0"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

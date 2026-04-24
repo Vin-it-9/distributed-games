@@ -1,0 +1,23 @@
+## Render.com blueprint — one long-lived Node process that hosts BOTH
+## the Next.js app and the Socket.IO server (WebSockets persist across
+## requests, which is what Vercel's serverless functions cannot do).
+##
+## To deploy:
+##   1. Go to https://dashboard.render.com/blueprints
+##   2. Click "New Blueprint Instance" and point it at this repo.
+##   3. Render auto-detects this file, builds, and gives you a public URL.
+services:
+  - type: web
+    name: distributed-games
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"

@@ -36,6 +36,42 @@ concepts stay easy to explain.
 
 ---
 
+## Deployment
+
+> **Do not deploy this to Vercel or GitHub Pages.** Vercel's serverless
+> functions can't hold open WebSocket connections, and GitHub Pages is a
+> static file host — both will show a working home page but every socket
+> handshake (`wss://…/api/socket`) will fail.
+
+This app needs **one long-lived Node process**. Pick any of:
+
+### Render (easiest, free)
+
+1. Push this repo to GitHub.
+2. Go to https://dashboard.render.com/blueprints and click
+   **New Blueprint Instance**.
+3. Pick this repo — Render reads `render.yaml`, builds, and gives you a
+   `https://distributed-games.onrender.com`-style URL. Done.
+
+### Fly.io (free, more control)
+
+```bash
+brew install flyctl              # or see https://fly.io/docs/hands-on/install-flyctl/
+fly auth login
+fly launch --no-deploy --copy-config   # pick a unique app name + region
+fly deploy
+```
+
+`fly.toml` and `Dockerfile` are already in the repo.
+
+### Railway
+
+Connect the repo on https://railway.app — it auto-detects Node, runs
+`npm run build` and `npm start`. No extra config needed. The free trial
+credit covers plenty of playtesting.
+
+---
+
 ## Running locally
 
 ```bash
