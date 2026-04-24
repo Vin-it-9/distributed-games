@@ -1,0 +1,2 @@
+# Keep this folder in git so the Docker build's COPY public/ step succeeds.
+# Next.js doesn't require a public/ folder, but our Dockerfile references it.
