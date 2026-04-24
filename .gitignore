@@ -15,3 +15,5 @@ next-env.d.ts.bak
 coverage/
 .idea/
 .vscode/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
