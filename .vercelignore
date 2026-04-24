@@ -1,8 +1,0 @@
-## This project uses a custom Node server (server.ts) that hosts Socket.IO
-## on /api/socket. Vercel's serverless functions cannot hold open WebSocket
-## connections, so a Vercel deployment will load the UI but fail on every
-## wss:// handshake.
-##
-## Deploy instead to Render, Fly.io, or Railway — see README for configs.
-## To stop Vercel auto-deploys: Project Settings → Git → Disconnect.
-*

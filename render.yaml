@@ -1,11 +1,11 @@
-## Render.com blueprint — one long-lived Node process that hosts BOTH
-## the Next.js app and the Socket.IO server (WebSockets persist across
+## Render.com Blueprint — one long-lived Node process that hosts both the
+## Next.js app and the Socket.IO server (WebSockets stay open across
 ## requests, which is what Vercel's serverless functions cannot do).
 ##
-## To deploy:
-##   1. Go to https://dashboard.render.com/blueprints
-##   2. Click "New Blueprint Instance" and point it at this repo.
-##   3. Render auto-detects this file, builds, and gives you a public URL.
+## Deploy:
+##   1. Dashboard → Blueprints → New Blueprint Instance
+##   2. Pick this repo → Apply
+##   3. Wait ~3 min, then open the onrender.com URL.
 services:
   - type: web
     name: distributed-games
@@ -13,7 +13,10 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: npm ci && npm run build
+    # NPM_CONFIG_PRODUCTION=false forces npm to install devDependencies
+    # (typescript, postcss, tailwindcss, @types/*) which Next.js needs to
+    # compile. The runtime itself still sees NODE_ENV=production below.
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:
