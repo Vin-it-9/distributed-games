@@ -5,9 +5,13 @@ import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket/client";
 import { CLIENT_EVENTS } from "@/lib/socket/events";
 import { useGameStore } from "@/lib/store/game-store";
-import { GAME_META, GAME_MODES, type GameMode } from "@/lib/game/types";
+import { GAME_META, type GameMode } from "@/lib/game/types";
 import { normalizeRoomId, isValidRoomId } from "@/lib/game/ids";
 import { Icon } from "@/components/shared/Icon";
+
+const LOCKED_MODE: GameMode = "math";
+const UNLOCK_KEYWORD = "unlock";
+const LOCK_KEYWORD = "lock";
 
 export default function HomePage() {
   const router = useRouter();
@@ -16,18 +20,40 @@ export default function HomePage() {
   const connected = useGameStore((s) => s.connected);
 
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<GameMode>("quiz");
+  const [mode, setMode] = useState<GameMode>("math");
+  const [availableModes, setAvailableModes] = useState<GameMode[]>(["math"]);
   const [joinRoomId, setJoinRoomId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function isUnlockName(value: string): boolean {
+    return value.trim().toLowerCase() === UNLOCK_KEYWORD;
+  }
+
+  function isLockName(value: string): boolean {
+    return value.trim().toLowerCase() === LOCK_KEYWORD;
+  }
+
+  function loadModes() {
+    const sock = getSocket();
+    sock.emit(CLIENT_EVENTS.MODES_GET, {}, (res) => {
+      if (!res.ok) return;
+      const modes = res.data?.modes?.length ? res.data.modes : [LOCKED_MODE];
+      setAvailableModes(modes);
+      setMode((current) => (modes.includes(current) ? current : modes[0]));
+    });
+  }
+
   useEffect(() => {
     const sock = getSocket();
-    const onConn = () => setConnected(true);
+    const onConn = () => {
+      setConnected(true);
+      loadModes();
+    };
     const onDisc = () => setConnected(false);
     sock.on("connect", onConn);
     sock.on("disconnect", onDisc);
-    if (sock.connected) setConnected(true);
+    if (sock.connected) onConn();
     return () => {
       sock.off("connect", onConn);
       sock.off("disconnect", onDisc);
@@ -41,7 +67,32 @@ export default function HomePage() {
     return null;
   }
 
-  function onCreate() {
+  async function changeModesAndRefresh(action: "unlock" | "lock") {
+    if (!connected) {
+      setError("wait for connection and try again");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const sock = getSocket();
+    const event =
+      action === "unlock" ? CLIENT_EVENTS.MODES_UNLOCK : CLIENT_EVENTS.MODES_LOCK;
+    sock.emit(event, {}, (res) => {
+      setBusy(false);
+      if (!res.ok) return setError(res.error);
+      window.location.assign("/");
+    });
+  }
+
+  async function onCreate() {
+    if (isUnlockName(name)) {
+      await changeModesAndRefresh("unlock");
+      return;
+    }
+    if (isLockName(name)) {
+      await changeModesAndRefresh("lock");
+      return;
+    }
     const err = validateName();
     if (err) return setError(err);
     setBusy(true);
@@ -59,7 +110,15 @@ export default function HomePage() {
     });
   }
 
-  function onJoin() {
+  async function onJoin() {
+    if (isUnlockName(name)) {
+      await changeModesAndRefresh("unlock");
+      return;
+    }
+    if (isLockName(name)) {
+      await changeModesAndRefresh("lock");
+      return;
+    }
     const err = validateName();
     if (err) return setError(err);
     const normalized = normalizeRoomId(joinRoomId);
@@ -118,7 +177,7 @@ export default function HomePage() {
       <section>
         <div className="label mb-2">choose a game</div>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {GAME_MODES.map((m) => (
+          {availableModes.map((m) => (
             <button
               key={m}
               type="button"
@@ -165,6 +224,12 @@ export default function HomePage() {
             maxLength={20}
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (isUnlockName(name) || isLockName(name))) {
+                e.preventDefault();
+                void changeModesAndRefresh(isUnlockName(name) ? "unlock" : "lock");
+              }
+            }}
           />
 
           <div className="mb-4 flex items-center gap-2 text-xs text-gh-muted">
@@ -178,7 +243,9 @@ export default function HomePage() {
           <button
             className="btn btn-primary w-full"
             disabled={busy || !connected}
-            onClick={onCreate}
+            onClick={() => {
+              void onCreate();
+            }}
           >
             {busy ? (
               "creating…"
@@ -205,6 +272,12 @@ export default function HomePage() {
             maxLength={20}
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (isUnlockName(name) || isLockName(name))) {
+                e.preventDefault();
+                void changeModesAndRefresh(isUnlockName(name) ? "unlock" : "lock");
+              }
+            }}
           />
 
           <label className="label">room code</label>
@@ -219,7 +292,9 @@ export default function HomePage() {
           <button
             className="btn w-full"
             disabled={busy || !connected}
-            onClick={onJoin}
+            onClick={() => {
+              void onJoin();
+            }}
           >
             {busy ? (
               "joining…"

@@ -20,6 +20,9 @@ export const SERVER_EVENTS = {
 export const CLIENT_EVENTS = {
   ROOM_CREATE: "room:create",
   ROOM_JOIN: "room:join",
+  MODES_GET: "modes:get",
+  MODES_UNLOCK: "modes:unlock",
+  MODES_LOCK: "modes:lock",
   ROOM_LEAVE: "room:leave",
   PLAYER_READY: "player:ready",
   GAME_START: "game:start",
@@ -66,6 +69,18 @@ export type ClientToServerEvents = {
   [CLIENT_EVENTS.ROOM_JOIN]: (
     p: { roomId: string; name: string },
     ack: Ack<{ playerId: string; sessionToken: string }>
+  ) => void;
+  [CLIENT_EVENTS.MODES_GET]: (
+    p: Record<string, never>,
+    ack: Ack<{ modes: GameMode[]; unlocked: boolean }>
+  ) => void;
+  [CLIENT_EVENTS.MODES_UNLOCK]: (
+    p: Record<string, never>,
+    ack: Ack<{ modes: GameMode[]; unlocked: boolean }>
+  ) => void;
+  [CLIENT_EVENTS.MODES_LOCK]: (
+    p: Record<string, never>,
+    ack: Ack<{ modes: GameMode[]; unlocked: boolean }>
   ) => void;
   [CLIENT_EVENTS.ROOM_LEAVE]: (p: { roomId: string }, ack?: Ack) => void;
   [CLIENT_EVENTS.PLAYER_READY]: (p: { roomId: string }, ack?: Ack) => void;

@@ -15,6 +15,11 @@ Five modes in one app:
 - **Word Scramble** — unscramble the word; first to type the original wins.
 - **Emoji Decode** — decode the movie / phrase hidden in emoji; first correct wins.
 
+> Home page mode gating: the app starts with only **Math Sprint** visible. Type
+> `unlock` as the display name on home and press Enter to unlock all modes
+> server-wide. Type `lock` and press Enter to hide all except Math Sprint again
+> (in-memory, reset on server restart).
+
 The UI uses a GitHub dark palette with Apple-style glassmorphism panels and
 Google Material Symbols icons.
 

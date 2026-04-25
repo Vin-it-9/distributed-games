@@ -18,6 +18,13 @@ import {
   RoomJoinSchema,
 } from "@/lib/game/schemas";
 import {
+  areAllModesUnlocked,
+  getAvailableModes,
+  isModeAvailable,
+  lockToDefaultModes,
+  unlockAllModes,
+} from "@/lib/game/mode-gate";
+import {
   buildLeaderboard,
   createRoom,
   getRoom,
@@ -154,10 +161,36 @@ export function registerSocketHandlers(server: HTTPServer): IO {
   });
 
   io.on("connection", (socket) => {
+    socket.on(CLIENT_EVENTS.MODES_GET, (_payload, ack) => {
+      ack?.({
+        ok: true,
+        data: { modes: getAvailableModes(), unlocked: areAllModesUnlocked() },
+      });
+    });
+
+    socket.on(CLIENT_EVENTS.MODES_UNLOCK, (_payload, ack) => {
+      unlockAllModes();
+      ack?.({
+        ok: true,
+        data: { modes: getAvailableModes(), unlocked: areAllModesUnlocked() },
+      });
+    });
+
+    socket.on(CLIENT_EVENTS.MODES_LOCK, (_payload, ack) => {
+      lockToDefaultModes();
+      ack?.({
+        ok: true,
+        data: { modes: getAvailableModes(), unlocked: areAllModesUnlocked() },
+      });
+    });
+
     // ROOM CREATE ------------------------------------------------------
     socket.on(CLIENT_EVENTS.ROOM_CREATE, (payload, ack) => {
       const parsed = parse(RoomCreateSchema, payload);
       if ("__error" in parsed) return ack?.({ ok: false, error: parsed.__error });
+      if (!isModeAvailable(parsed.mode)) {
+        return ack?.({ ok: false, error: "mode is locked" });
+      }
 
       // Retry up to a few times in the astronomically unlikely event of
       // a collision in the in-memory map.
